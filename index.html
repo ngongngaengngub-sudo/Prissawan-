@@ -1,1 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORRERY OS - Interactive Solar System</title>
+    <!-- Tailwind CSS for sleek UI styling -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background-color: #020205;
+            overflow: hidden;
+        }
+        .font-orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+        /* Glassmorphism utility */
+        .glasspanel {
+            background: rgba(10, 15, 30, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 149, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
+        /* Custom scrollbar for data panels */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.1);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 149, 255, 0.4);
+            border-radius: 2px;
+        }
+    </style>
+    <!-- Three.js and OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body class="text-slate-100 select-none w-screen h-screen relative m-0 p-0">
 
+    <!-- Canvas for 3D Rendering -->
+    <canvas id="spaceCanvas" class="absolute top-0 left-0 w-full h-full z-0 block"></canvas>
+
+    <!-- CINEMATIC HUD / TOP BAR -->
+    <header class="absolute top-0 left-0 w-full z-10 p-4 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
+        <div class="pointer-events-auto">
+            <h1 class="font-orbitron text-xl md:text-2xl font-black tracking-widest text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">ORRERY // ENGINE</h1>
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Tactical Planetary Exploration System</p>
+        </div>
+        
+        <!-- Simulation Controls -->
+        <div class="pointer-events-auto flex items-center gap-4 glasspanel px-4 py-2 rounded-xl text-sm">
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-cyan-400 uppercase font-bold">Warp Speed:</span>
+                <input id="speedSlider" type="range" min="0" max="5" step="0.1" value="1" class="w-24 accent-cyan-400 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer">
+                <span id="speedDisplay" class="font-mono text-xs w-8 text-right">1.0x</span>
+            </div>
+            <div class="h-4 w-[1px] bg-slate-700"></div>
+            <button id="toggleLabelsBtn" class="text-xs uppercase font-bold tracking-wider px-2 py-1 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/40 transition">
+                Labels: ON
+            </button>
+        </div>
+    </header>
+
+    <!-- LEFT BAR: MISSION MODE & ACHIEVEMENTS -->
+    <section class="absolute left-4 top-24 bottom-4 w-72 z-10 flex flex-col gap-4 pointer-events-none">
+        <!-- Missions Panel -->
+        <div class="pointer-events-auto glasspanel p-4 rounded-2xl flex-1 flex flex-col min-h-0">
+            <h2 class="font-orbitron text-sm font-bold tracking-wider text-cyan-400 border-b border-slate-800 pb-2 mb-3 flex items-center gap-2">
+                <span>🛰️</span> DEEP SPACE MISSIONS
+            </h2>
+            <div id="missionList" class="flex-1 overflow-y-auto space-y-2 pr-1">
+                <!-- Dynamically loaded missions -->
+            </div>
+        </div>
+
+        <!-- Achievements Mini-Panel -->
+        <div class="pointer-events-auto glasspanel p-4 rounded-2xl h-40 flex flex-col">
+            <h2 class="font-orbitron text-sm font-bold tracking-wider text-amber-400 border-b border-slate-800 pb-2 mb-2 flex items-center gap-2">
+                <span>🏆</span> ACHIEVEMENTS
+            </h2>
+            <div id="achievementBadgeContainer" class="flex gap-2 flex-wrap overflow-y-auto">
+                <!-- Dynamic Badges -->
+            </div>
+        </div>
+    </section>
+
+    <!-- RIGHT BAR: DYNAMIC PLANET INTERFACE & QUIZ -->
+    <section class="absolute right-4 top-24 bottom-4 w-80 md:w-96 z-10 flex flex-col gap-4 pointer-events-none">
+        
+        <!-- Planet Info System -->
+        <div id="infoPanel" class="pointer-events-auto glasspanel p-5 rounded-2xl flex-1 flex flex-col min-h-0 transition-all duration-300 transform translate-x-0">
+            <div id="infoWelcome" class="flex flex-col items-center justify-center text-center h-full text-slate-400 space-y-3">
+                <span class="text-4xl animate-pulse">🌌</span>
+                <p class="font-orbitron text-sm font-bold uppercase tracking-wider text-cyan-400">Select a Celestial Body</p>
+                <p class="text-xs max-w-[200px]">Click directly on any planet or orbital path to scan structure, metrics, and logs.</p>
+            </div>
+
+            <div id="infoContent" class="hidden flex-col h-full min-h-0">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <h2 id="planetName" class="font-orbitron text-2xl font-black text-white uppercase tracking-wider">Earth</h2>
+                        <p id="planetType" class="text-xs text-cyan-400 uppercase tracking-widest font-bold">Terrestrial World</p>
+                    </div>
+                    <button id="closeInfoBtn" class="text-slate-400 hover:text-white font-bold p-1">&times;</button>
+                </div>
+
+                <!-- Technical Specs Grid -->
+                <div class="grid grid-cols-2 gap-2 my-3 text-xs bg-black/40 p-3 rounded-xl border border-slate-800 font-mono">
+                    <div>
+                        <span class="text-slate-500 block uppercase text-[10px]">Diameter</span>
+                        <span id="specDiameter" class="text-slate-200">12,742 km</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 block uppercase text-[10px]">Distance from Sun</span>
+                        <span id="specDistance" class="text-slate-200">1.00 AU</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 block uppercase text-[10px]">Orbit Period</span>
+                        <span id="specOrbit" class="text-slate-200">365 Days</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 block uppercase text-[10px]">Satellites</span>
+                        <span id="specMoons" class="text-cyan-400">1 Moon</span>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto space-y-3 pr-1 text-sm text-slate-300">
+                    <div>
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Telemetry Summary</span>
+                        <p id="planetFact" class="leading-relaxed bg-slate-900/40 p-3 rounded-lg border border-slate-800/60"></p>
+                    </div>
+                </div>
+                
+                <button id="scanPlanetBtn" class="mt-4 w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-orbitron font-bold text-xs uppercase py-3 rounded-xl shadow-lg shadow-cyan-900/40 transition active:scale-95">
+                    Initiate Mission Scan
+                </button>
+            </div>
+        </div>
+
+        <!-- Mini-Quiz Panel -->
+        <div class="pointer-events-auto glasspanel p-4 rounded-2xl h-64 flex flex-col">
+            <h2 class="font-orbitron text-sm font-bold tracking-wider text-purple-400 border-b border-slate-800 pb-2 mb-2 flex items-center gap-2">
+                <span>🧠</span> COMMAND CENTER EVALUATION
+            </h2>
+            <div id="quizContainer" class="flex-1 flex flex-col justify-between min-h-0">
+                <p id="quizQuestion" class="text-xs md:text-sm font-semibold text-slate-200 mb-2"></p>
+                <div id="quizOptions" class="grid grid-cols-1 gap-1.5">
+                    <!-- Options injected here -->
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- INLINE WEB AUDIO GRAPH FOR SOUND GENERATION -->
+    <script>
+        // Procedural Audio Engine (No external sound files required)
+        const AudioEngine = {
+            ctx: null,
+            init() {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            },
+            playTone(freq, type, duration, vol) {
+                if(!this.ctx) return;
+                try {
+                    let osc = this.ctx.createOscillator();
+                    let gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.00001, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch(e){}
+            },
+            click() { this.playTone(800, 'sine', 0.1, 0.05); },
+            success() { 
+                this.playTone(523.25, 'sine', 0.15, 0.1); 
+                setTimeout(() => this.playTone(659.25, 'sine', 0.2, 0.1), 100);
+            },
+            fail() { this.playTone(180, 'sawtooth', 0.3, 0.1); },
+            scan() { this.playTone(1200, 'triangle', 0.4, 0.05); }
+        };
+        window.addEventListener('click', () => { if(!AudioEngine.ctx) AudioEngine.ctx = new AudioEngine.init(); });
+    </script>
+
+    <!-- SYSTEM DATA ENGINE -->
+    <script>
+        const planetsData = [
+            { name: 'Sun', size: 3.5, dist: 0, speed: 0, color: 0xffaa00, type: 'Yellow Dwarf', diameter: '1,392,700 km', distance: '0 AU', orbit: 'N/A', moons: '0', fact: 'The Sun accounts for 99.86% of the mass in the entire solar system. Its core reaches temperatures over 15 million degrees Celsius.', mission: 'Solar Flare Analysis' },
+            { name: 'Mercury', size: 0.38, dist: 6, speed: 0.04, color: 0xaaaaaa, type: 'Terrestrial World', diameter: '4,879 km', distance: '0.39 AU', orbit: '88 Days', moons: '0', fact: 'Mercury is the closest planet to the Sun and experiences wild temperature swings, ranging from 430°C during the day to -180°C at night.', mission: 'Map Caloris Basin' },
+            { name: 'Venus', size: 0.94, dist: 9, speed: 0.015, color: 0xe3bb76, type: 'Terrestrial World', diameter: '12,104 km', distance: '0.72 AU', orbit: '225 Days', moons: '0', fact: 'Venus features a runaway greenhouse effect making its surface hot enough to melt lead. It spins backwards on its axis compared to most planets.', mission: 'Atmospheric Probe Deployment' },
+            { name: 'Earth', size: 1.0, dist: 13, speed: 0.01, color: 0x2277ff, type: 'Terrestrial World', diameter: '12,742 km', distance: '1.00 AU', orbit: '365 Days', moons: '1', fact: 'Earth is the only known celestial body supporting life. Its liquid water crust, oxygen-rich environment, and protective magnetosphere keep us safe.', mission: 'Orbital Magnetosphere Check' },
+            { name: 'Mars', size: 0.53, dist: 17, speed: 0.008, color: 0xcc4422, type: 'Terrestrial World', diameter: '6,779 km', distance: '1.52 AU', orbit: '687 Days', moons: '2', fact: 'Mars is home to Olympus Mons, the largest volcano in the Solar System, which stands three times taller than Mount Everest.', mission: 'Rover Biosign Search' },
+            { name: 'Jupiter', size: 2.2, dist: 24, speed: 0.002, color: 0xd4a373, type: 'Gas Giant', diameter: '139,820 km', distance: '5.20 AU', orbit: '12 Years', moons: '95', fact: 'Jupiter is a massive gas giant over twice as massive as all other planets combined. Its legendary Great Red Spot is a persistent hurricane wider than Earth.', mission: 'Great Red Spot Flyby' },
+            { name: 'Saturn', size: 1.8, dist: 31, speed: 0.0009, color: 0xf4e2bb, type: 'Gas Giant', diameter: '116,460 km', distance: '9.58 AU', orbit: '29 Years', moons: '146', fact: 'Saturn possesses a spectacular, highly visible ring architecture composed mostly of water ice chunks, rocky debris, and cosmic dust particles.', mission: 'Ring Division Scanning' },
+            { name: 'Uranus', size: 1.2, dist: 37, speed: 0.0004, color: 0x70d6ff, type: 'Ice Giant', diameter: '50,724 km', distance: '19.22 AU', orbit: '84 Years', moons: '28', fact: 'Uranus features a radical 98-degree axial tilt, causing it to literally roll sideways along its orbital path around the Sun.', mission: 'Deep Core Magnetism Scan' },
+            { name: 'Neptune', size: 1.1, dist: 43, speed: 0.0001, color: 0x3a86ff, type: 'Ice Giant', diameter: '49,244 km', distance: '30.05 AU', orbit: '165 Years', moons: '16', fact: 'Neptune experiences the most violent wind environments in the Solar System, tracking supersonic storms clocked up to 2,100 kilometers per hour.', mission: 'Triton Gravitational Reading' }
+        ];
+
+        const quizData = [
+            { q: "Which planet features the colossal Olympus Mons volcano?", o: ["Mars", "Venus", "Saturn", "Mercury"], a: 0 },
+            { q: "What celestial object holds 99.86% of the solar system's mass?", o: ["Jupiter", "The Sun", "Saturn", "Black Hole Baseline"], a: 1 },
+            { q: "Which planet tilts nearly 98 degrees, spinning on its side?", o: ["Neptune", "Jupiter", "Uranus", "Venus"], a: 2 },
+            { q: "Which world has a runaway greenhouse atmosphere that melts lead?", o: ["Mercury", "Venus", "Mars", "Jupiter"], a: 1 },
+            { q: "How many moons does the planet Mercury possess?", o: ["0 Moons", "1 Moon", "2 Moons", "4 Moons"], a: 0 }
+        ];
+
+        // System state variables
+        let selectedPlanet = null;
+        let speedMultiplier = 1.0;
+        let displayLabels = true;
+        const achievements = new Set();
+        const activeMissions = {}; 
+        planetsData.forEach(p => { if(p.name !== 'Sun') activeMissions[p.name] = { completed: false }; });
+    </script>
+
+    <!-- CORE 3D GRAPHICS ENGINE & CONTROLS -->
+    <script>
+        const canvas = document.getElementById('spaceCanvas');
+        const scene = new THREE.Scene();
+        // Soft deep-space environmental ambient glow
+        scene.background = new THREE.Color(0x020206);
+        scene.fog = new THREE.FogExp2(0x020206, 0.005);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 35, 55);
+
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxDistance = 180;
+        controls.minDistance = 5;
+
+        // LIGHTING ARCHITECTURE
+        const ambientLight = new THREE.AmbientLight(0x112244, 1.5);
+        scene.add(ambientLight);
+
+        // Core central omni-directional light casting solar beams outwards
+        const sunLight = new THREE.PointLight(0xffffff, 3, 300, 0.5);
+        sunLight.castShadow = true;
+        scene.add(sunLight);
+
+        // EXTRA BACKGROUND DECORATION (Starfield Matrix)
+        const starGeo = new THREE.BufferGeometry();
+        const starCount = 2500;
+        const starPos = new Float32Array(starCount * 3);
+        const starColors = new Float32Array(starCount * 3);
+
+        for(let i=0; i < starCount*3; i+=3) {
+            // Distribute stars widely away from center
+            let radius = 150 + Math.random() * 300;
+            let theta = Math.random() * Math.PI * 2;
+            let phi = Math.acos((Math.random() * 2) - 1);
+
+            starPos[i] = radius * Math.sin(phi) * Math.cos(theta);
+            starPos[i+1] = radius * Math.sin(phi) * Math.sin(theta);
+            starPos[i+2] = radius * Math.cos(phi);
+
+            // Assign subtle realistic color variances (Blue-white to yellow-white stars)
+            starColors[i] = 0.8 + Math.random()*0.2;
+            starColors[i+1] = 0.8 + Math.random()*0.2;
+            starColors[i+2] = 1.0;
+        }
+        starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+        starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+        const starMat = new THREE.PointsMaterial({ size: 0.6, vertexColors: true, transparent: true, opacity: 0.8 });
+        const starField = new THREE.Points(starGeo, starMat);
+        scene.add(starField);
+
+        // ASTEROID BELT ENGINE (Placed between Mars and Jupiter)
+        const asteroidGroup = new THREE.Group();
+        const asteroidCount = 400;
+        const astMat = new THREE.MeshStandardMaterial({ color: 0x55443c, roughness: 0.9 });
+        for(let i=0; i<asteroidCount; i++) {
+            let astSize = 0.04 + Math.random()*0.08;
+            let astGeo = new THREE.DodecahedronGeometry(astSize, 0);
+            let mesh = new THREE.Mesh(astGeo, astMat);
+            
+            let dist = 20 + Math.random()*2.5;
+            let angle = Math.random() * Math.PI * 2;
+            mesh.position.set(Math.cos(angle)*dist, (Math.random()-0.5)*0.6, Math.sin(angle)*dist);
+            mesh.userData = { speed: 0.001 + Math.random()*0.002, angle: angle, dist: dist };
+            asteroidGroup.add(mesh);
+        }
+        scene.add(asteroidGroup);
+
+        // GENERATE CELESTIAL MESHES
+        const planetMeshes = [];
+        const labelElements = [];
+
+        planetsData.forEach((data) => {
+            const pivot = new THREE.Group();
+            scene.add(pivot);
+
+            // Create physical object
+            let geo, mat;
+            if(data.name === 'Sun') {
+                geo = new THREE.SphereGeometry(data.size, 32, 32);
+                mat = new THREE.MeshBasicMaterial({ color: data.color });
+            } else {
+                geo = new THREE.SphereGeometry(data.size, 24, 24);
+                mat = new THREE.MeshStandardMaterial({ 
+                    color: data.color, 
+                    roughness: 0.6, 
+                    metalness: 0.1 
+                });
+            }
+
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.x = data.dist;
+            mesh.castShadow = data.name !== 'Sun';
+            mesh.receiveShadow = true;
+            pivot.add(mesh);
+
+            // Unique details like Saturn's rings
+            if(data.name === 'Saturn') {
+                const ringGeo = new THREE.RingGeometry(data.size * 1.4, data.size * 2.3, 30);
+                const ringMat = new THREE.MeshStandardMaterial({ color: 0xa69575, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+                const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+                ringMesh.rotation.x = Math.PI / 2;
+                mesh.add(ringMesh);
+            }
+
+            // Draw orbital reference path lines
+            if(data.name !== 'Sun') {
+                const pathGeo = new THREE.BufferGeometry();
+                const points = [];
+                for(let j=0; j<=128; j++) {
+                    let theta = (j/128) * Math.PI * 2;
+                    points.push(new THREE.Vector3(Math.cos(theta)*data.dist, 0, Math.sin(theta)*data.dist));
+                }
+                pathGeo.setFromPoints(points);
+                const pathMat = new THREE.LineBasicMaterial({ color: 0x0095ff, transparent: true, opacity: 0.12 });
+                const orbitLine = new THREE.Line(pathGeo, pathMat);
+                scene.add(orbitLine);
+            }
+
+            // Map data descriptors onto mesh reference
+            mesh.userData = { name: data.name, data: data, pivot: pivot };
+            planetMeshes.push(mesh);
+
+            // Generate structural flat UI anchor labels overlay
+            const label = document.createElement('div');
+            label.className = 'absolute text-[10px] font-orbitron font-bold tracking-widest uppercase pointer-events-none text-slate-400 bg-slate-950/80 px-1.5 py-0.5 rounded border border-slate-800 transition-opacity duration-200 z-5';
+            label.innerText = data.name;
+            document.body.appendChild(label);
+            labelElements.push({ element: label, object: mesh });
+        });
+
+        // RAYCASTING FOR INTERACTIVE SELECTION
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        window.addEventListener('click', (e) => {
+            // Block raycast triggers if picking interactive overlay systems
+            if(e.target.closest('header') || e.target.closest('section') || e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+
+            const intersects = raycaster.intersectObjects(planetMeshes);
+            if(intersects.length > 0) {
+                AudioEngine.click();
+                selectCelestialBody(intersects[0].object.userData.data);
+            }
+        });
+
+        function selectCelestialBody(data) {
+            selectedPlanet = data;
+            document.getElementById('infoWelcome').classList.add('hidden');
+            document.getElementById('infoContent').classList.remove('hidden');
+            document.getElementById('infoContent').classList.add('flex');
+
+            document.getElementById('planetName').innerText = data.name;
+            document.getElementById('planetType').innerText = data.type;
+            document.getElementById('specDiameter').innerText = data.diameter;
+            document.getElementById('specDistance').innerText = data.distance;
+            document.getElementById('specOrbit').innerText = data.orbit;
+            document.getElementById('specMoons').innerText = data.moons + (data.moons === '1' ? ' Moon' : ' Moons');
+            document.getElementById('planetFact').innerText = data.fact;
+
+            // Handle mission button state
+            const missionBtn = document.getElementById('scanPlanetBtn');
+            if(data.name === 'Sun') {
+                missionBtn.classList.add('hidden');
+            } else {
+                missionBtn.classList.remove('hidden');
+                if(activeMissions[data.name].completed) {
+                    missionBtn.innerText = "⚡ MISSION COMPLETED";
+                    missionBtn.className = "mt-4 w-full bg-emerald-600/30 text-emerald-400 font-orbitron font-bold text-xs uppercase py-3 rounded-xl border border-emerald-500/30 cursor-not-allowed";
+                } else {
+                    missionBtn.innerText = `Launch: ${data.mission}`;
+                    missionBtn.className = "mt-4 w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-orbitron font-bold text-xs uppercase py-3 rounded-xl shadow-lg shadow-cyan-900/40 transition active:scale-95";
+                }
+            }
+
+            unlockAchievement('Explorer', 'Discovered your first planet architecture.');
+        }
+
+        document.getElementById('closeInfoBtn').addEventListener('click', () => {
+            selectedPlanet = null;
+            document.getElementById('infoContent').classList.add('hidden');
+            document.getElementById('infoWelcome').classList.remove('hidden');
+        });
+    </script>
+
+    <!-- RENDER LOOP ANIMATOR -->
+    <script>
+        const tempV = new THREE.Vector3();
+        let frameCount = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            frameCount++;
+
+            // Step planetary orbits forward
+            planetMeshes.forEach(mesh => {
+                const data = mesh.userData.data;
+                
+                // Rotation on axis
+                if(data.name === 'Sun') {
+                    mesh.rotation.y += 0.002;
+                } else {
+                    mesh.rotation.y += 0.01;
+                    // Orbital revolution around central star
+                    mesh.userData.pivot.rotation.y += data.speed * speedMultiplier;
+                }
+
+                // Smooth camera focus tracking if planet selected
+                if(selectedPlanet && selectedPlanet.name === data.name && frameCount % 2 === 0) {
+                    // Sample matrix world vector coordinates
+                    mesh.getWorldPosition(tempV);
+                    // Smooth lerp camera target step adjustments
+                    controls.target.lerp(tempV, 0.05);
+                }
+            });
+
+            // Animate Asteroid belt
+            asteroidGroup.children.forEach(ast => {
+                ast.userData.angle += ast.userData.speed * speedMultiplier;
+                ast.position.x = Math.cos(ast.userData.angle) * ast.userData.dist;
+                ast.position.z = Math.sin(ast.userData.angle) * ast.userData.dist;
+                ast.rotation.y += 0.01;
+            });
+
+            // Update Screen Space HTML Overlay Anchor Labels
+            labelElements.forEach(item => {
+                if (!displayLabels) {
+                    item.element.style.opacity = '0';
+                    return;
+                }
+                item.object.getWorldPosition(tempV);
+                
+                // Check vector bounding visibility bounds behind camera lens array
+                tempV.project(camera);
+                if(tempV.z > 1) {
+                    item.element.style.opacity = '0';
+                } else {
+                    const x = (tempV.x *  .5 + .5) * window.innerWidth;
+                    const y = (tempV.y * -.5 + .5) * window.innerHeight;
+                    item.element.style.opacity = '1';
+                    item.element.style.left = `${x}px`;
+                    item.element.style.top = `${y - 18}px`;
+                }
+            });
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Trigger loop start
+        animate();
+    </script>
+
+    <!-- CORE SIMULATION INTERACTION UI ENGINE -->
+    <script>
+        // Speed Controller configuration
+        const speedSlider = document.getElementById('speedSlider');
+        const speedDisplay = document.getElementById('speedDisplay');
+        speedSlider.addEventListener('input', (e) => {
+            speedMultiplier = parseFloat(e.target.value);
+            speedDisplay.innerText = speedMultiplier.toFixed(1) + 'x';
+        });
+
+        // Toggle Labels configurations
+        const toggleLabelsBtn = document.getElementById('toggleLabelsBtn');
+        toggleLabelsBtn.addEventListener('click', () => {
+            displayLabels = !displayLabels;
+            toggleLabelsBtn.innerText = `Labels: ${displayLabels ? 'ON' : 'OFF'}`;
+            toggleLabelsBtn.className = displayLabels 
+                ? "text-xs uppercase font-bold tracking-wider px-2 py-1 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/40 transition"
+                : "text-xs uppercase font-bold tracking-wider px-2 py-1 rounded bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700 transition";
+        });
+
+        // GAMEPLAY SYSTEM: QUIZ ENGINE
+        let activeQuizIdx = 0;
+        function loadQuizQuestion() {
+            const container = document.getElementById('quizOptions');
+            const qEl = document.getElementById('quizQuestion');
+            const data = quizData[activeQuizIdx];
+
+            qEl.innerText = data.q;
+            container.innerHTML = '';
+
+            data.o.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = "w-full text-left text-xs bg-slate-900/60 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 px-3 py-2 rounded-lg font-medium transition text-slate-300 active:scale-[0.99]";
+                btn.innerText = opt;
+                btn.onclick = () => verifyQuizAnswer(idx, btn);
+                container.appendChild(btn);
+            });
+        }
+
+        function verifyQuizAnswer(chosenIdx, element) {
+            const current = quizData[activeQuizIdx];
+            const options = document.getElementById('quizOptions').children;
+            
+            // Lock secondary input modifications during evaluation loops
+            for(let btn of options) btn.disabled = true;
+
+            if(chosenIdx === current.a) {
+                AudioEngine.success();
+                element.className = "w-full text-left text-xs bg-emerald-950/60 border border-emerald-500 text-emerald-400 px-3 py-2 rounded-lg font-bold";
+                unlockAchievement('Scholar', 'Passed the stellar command quiz checks.');
+            } else {
+                AudioEngine.fail();
+                element.className = "w-full text-left text-xs bg-rose-950/60 border border-rose-500 text-rose-400 px-3 py-2 rounded-lg font-bold";
+                options[current.a].className = "w-full text-left text-xs bg-emerald-950/40 border border-emerald-600 text-emerald-400 px-3 py-2 rounded-lg font-bold animate-pulse";
+            }
+
+            setTimeout(() => {
+                activeQuizIdx = (activeQuizIdx + 1) % quizData.length;
+                loadQuizQuestion();
+            }, 2500);
+        }
+
+        // GAMEPLAY SYSTEM: MISSION MODULES
+        function buildMissionsPanel() {
+            const target = document.getElementById('missionList');
+            target.innerHTML = '';
+
+            planetsData.forEach(p => {
+                if(p.name === 'Sun') return;
+                
+                const card = document.createElement('div');
+                const isDone = activeMissions[p.name].completed;
+                card.className = `p-3 rounded-xl border flex justify-between items-center transition cursor-pointer ${isDone ? 'bg-emerald-950/20 border-emerald-900/50 opacity-70' : 'bg-slate-900/40 border-slate-800/80 hover:border-slate-700'}`;
+                
+                card.innerHTML = `
+                    <div>
+                        <h4 class="text-xs font-bold font-orbitron tracking-wide ${isDone ? 'text-emerald-400' : 'text-slate-200'}">${p.name} Campaign</h4>
+                        <p class="text-[11px] text-slate-400 max-w-[180px] truncate">${p.mission}</p>
+                    </div>
+                    <span class="text-xs">${isDone ? '✅' : '🛰️'}</span>
+                `;
+
+                card.onclick = () => selectCelestialBody(p);
+                target.appendChild(card);
+            });
+        }
+
+        document.getElementById('scanPlanetBtn').addEventListener('click', () => {
+            if(!selectedPlanet || selectedPlanet.name === 'Sun') return;
+            
+            AudioEngine.scan();
+            activeMissions[selectedPlanet.name].completed = true;
+            
+            // Update view states immediately
+            selectCelestialBody(selectedPlanet);
+            buildMissionsPanel();
+
+            // Evaluate complete campaign tallies
+            let allDone = true;
+            for(let k in activeMissions) if(!activeMissions[k].completed) allDone = false;
+            if(allDone) unlockAchievement('Grand Admiral', 'Successfully audited all planets.');
+        });
+
+        // ACHIEVEMENT BADGE MANAGEMENT
+        function unlockAchievement(id, desc) {
+            if(achievements.has(id)) return;
+            achievements.add(id);
+
+            const container = document.getElementById('achievementBadgeContainer');
+            const icon = id === 'Explorer' ? '🚀' : id === 'Scholar' ? '🎓' : '👑';
+            
+            const badge = document.createElement('div');
+            badge.className = "flex items-center gap-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-lg animate-bounce";
+            badge.title = desc;
+            badge.innerHTML = `<span>${icon}</span> ${id}`;
+            
+            container.appendChild(badge);
+            AudioEngine.success();
+        }
+
+        // Initialize gameplay modules
+        loadQuizQuestion();
+        buildMissionsPanel();
+    </script>
+</body>
+</html>
